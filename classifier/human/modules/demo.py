@@ -60,7 +60,7 @@ class Window(QtGui.QWidget):
         self.updateTimer.start()
         #  self.updateTimer.timeout.connect(self.updateGraph)
         self.updateTimer.timeout.connect(self.updateIntensity)
-        #  self.updateTimer.timeout.connect(lambda: self.updateProbs(updateType='machine'))
+        self.updateTimer.timeout.connect(lambda: self.updateProbs(updateType='machine'))
 
         self.setGeometry(350,350,1250,900)
 
@@ -280,7 +280,7 @@ class Window(QtGui.QWidget):
                     for i in names:
                         for prev_value in self.prev_obs:
                             for value in obs:
-                                # P(X|Ok,Ok-1,Theta)=P(X)P(Theta|Ok,Ok-1,X)P(Ok,Ok-1|X)
+                                ''' P(X|Ok,Ok-1,Theta)=P(X)P(Theta|Ok,Ok-1,X)P(Ok,Ok-1|X)'''
                                 likelihood=new_means[names.index(i),prev_value,value]*(new_means[names.index(i),prev_value,value]/np.sum(new_means[names.index(i),:,:]))
                                 self.probs[i]*=likelihood
                     #normalize
@@ -293,7 +293,7 @@ class Window(QtGui.QWidget):
                             # this is used for redistribution
                             sum1=sum(self.table[:,prev_value,value])
                             for i in names:
-                                # P(Theta|Ok,Ok-1,X)=P(Theta)P(X|Ok,Ok-1,Theta)P(Ok,Ok-1|Theta)
+                                ''' P(Theta|Ok,Ok-1,X)=P(Theta)P(X|Ok,Ok-1,Theta)P(Ok,Ok-1|Theta)'''
                                 new_means[names.index(i),prev_value,value]*=self.probs[i]*(np.sum(new_means[:,prev_value,value])/np.sum(new_means))
                             # this on is used for regular normalization
                             sum2=sum(new_means[:,prev_value,value])
