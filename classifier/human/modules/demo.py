@@ -279,11 +279,54 @@ class Window(QtGui.QWidget):
                 obs.append(13)
             elif(self.rCumulonibiformNo.isChecked()):
                 obs.append(14)
+<<<<<<< HEAD
 
             prev_probs=np.ones(5)
             while spatial.distance.cosine(prev_probs,self.probs.values())!=0.0:
             #  for k in range(5):
                 print spatial.distance.cosine(prev_probs,self.probs.values())
+=======
+            
+            prev_probs=np.ones(5)
+            if self.total_obs>1:
+                while spatial.distance.cosine(prev_probs,self.probs.values())!=0.0:
+                #  for k in range(5):
+                    print spatial.distance.cosine(prev_probs,self.probs.values())
+                    prev_probs=self.probs.values()
+                    means=scipy.stats.dirichlet.mean(alpha=np.reshape(self.table,(1,self.table.shape[0]*self.table.shape[1]*self.table.shape[2]))[0])
+                    new_means=np.reshape(np.array(means),(5,15,15))
+                    for i in names:
+                        for prev_value in self.prev_obs:
+                            for value in obs:
+                                ''' P(X|Ok,Ok-1,Theta)=P(X)P(Theta|Ok,Ok-1,X)P(Ok,Ok-1|X)'''
+                                likelihood=new_means[names.index(i),prev_value,value]*(new_means[names.index(i),prev_value,value]/np.sum(new_means[names.index(i),:,:]))
+                                self.probs[i]*=likelihood
+                    #normalize
+                    suma=sum(self.probs.values())
+                    for i in names:
+                        self.probs[i]/=suma
+
+                    for prev_value in self.prev_obs:
+                        for value in obs:
+                            # this is used for redistribution
+                            sum1=sum(self.table[:,prev_value,value])
+                            for i in names:
+                                ''' P(Theta|Ok,Ok-1,X)=P(Theta)P(X|Ok,Ok-1,Theta)P(Ok,Ok-1|Theta)'''
+                                new_means[names.index(i),prev_value,value]*=self.probs[i]*(np.sum(new_means[:,prev_value,value])/np.sum(new_means))
+                            # this on is used for regular normalization
+                            sum2=sum(new_means[:,prev_value,value])
+                            for i in names:
+                                new_means[names.index(i),prev_value,value]/=sum2
+                                self.table[names.index(i),prev_value,value]*=new_means[names.index(i),prev_value,value]
+                            sum3=sum(self.table[:,prev_value,value])
+                            for i in names:
+                                self.table[names.index(i),prev_value,value]/=sum3
+                            for i in names:
+                                self.table[names.index(i),prev_value,value]*=sum1
+                    self.table+=0.0001
+                                #  self.table[names.index(i),prev_value,value]=self.table[names.index(i),prev_value,value]*sum1+0.2*self.table[names.index(i),prev_value,value]+0.01
+            else:
+>>>>>>> 2ccdd840b5dedea5c0b06299f7b6134cab672ff7
                 prev_probs=self.probs.values()
                 means=scipy.stats.dirichlet.mean(alpha=np.reshape(self.table,(1,self.table.shape[0]*self.table.shape[1]*self.table.shape[2]))[0])
                 new_means=np.reshape(np.array(means),(5,15,15))
