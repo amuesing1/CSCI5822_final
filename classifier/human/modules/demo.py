@@ -19,6 +19,7 @@ from matplotlib.figure import Figure
 
 class Window(QtGui.QWidget):
     def __init__(self,total_data,intensity,prior):
+        ''' used code '''
         super(Window,self).__init__()
         self.frame=0
         self.all_data=total_data
@@ -26,19 +27,22 @@ class Window(QtGui.QWidget):
         self.table=prior
         self.prev_obs=range(15)
         self.total_obs=0
-        #  self.matplotlibWidget=MatplotlibWidget(self)
+        '''initiazize objects'''
+        self.matplotlibWidget=MatplotlibWidget(self)
         self.matplotlibWidget2=MatplotlibWidget2(self)
         self.matplotlibWidget3=MatplotlibWidget3(self)
         self.matplotlibWidget4=MatplotlibWidget4(self)
-        #  self.matplotlibWidget.move(25,25)
+        self.matplotlibWidget.move(25,25)
         self.matplotlibWidget2.move(550,300)
-        self.matplotlibWidget3.move(25,450)
-        self.matplotlibWidget4.move(25,25)
+        self.matplotlibWidget3.move(25,300)
+        self.matplotlibWidget4.move(500,25)
+        '''used code '''
         self.updateProbs()
         means=scipy.stats.dirichlet.mean(alpha=np.reshape(self.table,(1,self.table.shape[0]*self.table.shape[1]*self.table.shape[2]))[0])
         new_means=np.reshape(np.array(means),(5,15,15))
-        self.matplotlibWidget2.axis2.clear()
 
+        ''' initalize 3d bar graph '''
+        self.matplotlibWidget2.axis2.clear()
         _x=np.arange(15)
         _y=np.arange(15)
         _xx,_yy=np.meshgrid(_x,_y)
@@ -52,17 +56,21 @@ class Window(QtGui.QWidget):
         self.matplotlibWidget2.axis2.set_title('Likelihoods of Genus 0')
         self.matplotlibWidget2.axis2.bar3d(x,y,bottom,width,depth,top,shade=True)
         self.matplotlibWidget2.canvas2.draw()
+        "page window rm"
+        self.setGeometry(350,350,1250,900)
 
+
+
+        '''timer updates '''
         self.updateTimer=QtCore.QTimer(self)
         self.interval = 1000
         self.updateTimer.setInterval(self.interval)
 
         self.updateTimer.start()
-        #  self.updateTimer.timeout.connect(self.updateGraph)
+        #self.updateTimer.timeout.connect(self.updateGraph)
         self.updateTimer.timeout.connect(self.updateIntensity)
-        #  self.updateTimer.timeout.connect(lambda: self.updateProbs(updateType='machine'))
+        self.updateTimer.timeout.connect(lambda: self.updateProbs(updateType='machine'))
 
-        self.setGeometry(350,350,1250,900)
 
 
 
@@ -172,19 +180,21 @@ class Window(QtGui.QWidget):
         self.show()
 
     def updateGraph(self):
+        '''no longer used, boulder map'''
         maxsig=np.amax(self.all_data)
         self.matplotlibWidget.axis.imshow(self.all_data[self.frame],vmax=maxsig,cmap='Greys_r')
         self.matplotlibWidget.canvas.draw()
-        #  self.frame+=1
+        self.frame+=1
 
     def updateIntensity(self):
+        '''intensity plot '''
         self.matplotlibWidget3.axis3.clear()
         self.matplotlibWidget3.axis3.plot(range(self.frame),self.intensity[:self.frame])
         self.matplotlibWidget3.axis3.set_ylim(0,max(self.intensity)+1)
         self.matplotlibWidget3.canvas3.draw()
-        self.frame+=1
 
     def updateDir(self):
+        ''' 3d axis plot update'''
         #  self.table[0,self.prev_obs,obs]+=.01
         means=scipy.stats.dirichlet.mean(alpha=np.reshape(self.table,(1,self.table.shape[0]*self.table.shape[1]*self.table.shape[2]))[0])
         new_means=np.reshape(np.array(means),(5,15,15))
@@ -209,6 +219,7 @@ class Window(QtGui.QWidget):
         #  self.prev_obs=random.choice(obs)
 
     def updateProbs(self,updateType=None):
+        '''genus upadate '''
         modelFileName = '../../HMM/data/histModels_final.npy'
         models = np.load(modelFileName).item()
         hmm=HMM_Classification()
@@ -218,8 +229,8 @@ class Window(QtGui.QWidget):
             self.probs={}
             for i in names:
                 self.alphas[i]=[-1,-1]
-                self.probs[i]=.2
-                #  self.probs[i]=np.random.uniform()
+                #  self.probs[i]=.2
+                self.probs[i]=np.random.uniform()
             for i in names:
                 self.probs[i]/=sum(self.probs.values())
         elif updateType=='machine':
@@ -268,46 +279,11 @@ class Window(QtGui.QWidget):
                 obs.append(13)
             elif(self.rCumulonibiformNo.isChecked()):
                 obs.append(14)
-            
-            prev_probs=np.ones(5)
-            if self.total_obs>1:
-                while spatial.distance.cosine(prev_probs,self.probs.values())!=0.0:
-                #  for k in range(5):
-                    print spatial.distance.cosine(prev_probs,self.probs.values())
-                    prev_probs=self.probs.values()
-                    means=scipy.stats.dirichlet.mean(alpha=np.reshape(self.table,(1,self.table.shape[0]*self.table.shape[1]*self.table.shape[2]))[0])
-                    new_means=np.reshape(np.array(means),(5,15,15))
-                    for i in names:
-                        for prev_value in self.prev_obs:
-                            for value in obs:
-                                # P(X|Ok,Ok-1,Theta)=P(X)P(Theta|Ok,Ok-1,X)P(Ok,Ok-1|X)
-                                likelihood=new_means[names.index(i),prev_value,value]*(new_means[names.index(i),prev_value,value]/np.sum(new_means[names.index(i),:,:]))
-                                self.probs[i]*=likelihood
-                    #normalize
-                    suma=sum(self.probs.values())
-                    for i in names:
-                        self.probs[i]/=suma
 
-                    for prev_value in self.prev_obs:
-                        for value in obs:
-                            # this is used for redistribution
-                            sum1=sum(self.table[:,prev_value,value])
-                            for i in names:
-                                # P(Theta|Ok,Ok-1,X)=P(Theta)P(X|Ok,Ok-1,Theta)P(Ok,Ok-1|Theta)
-                                new_means[names.index(i),prev_value,value]*=self.probs[i]*(np.sum(new_means[:,prev_value,value])/np.sum(new_means))
-                            # this on is used for regular normalization
-                            sum2=sum(new_means[:,prev_value,value])
-                            for i in names:
-                                new_means[names.index(i),prev_value,value]/=sum2
-                                self.table[names.index(i),prev_value,value]*=new_means[names.index(i),prev_value,value]
-                            sum3=sum(self.table[:,prev_value,value])
-                            for i in names:
-                                self.table[names.index(i),prev_value,value]/=sum3
-                            for i in names:
-                                self.table[names.index(i),prev_value,value]*=sum1
-                    self.table+=0.0001
-                                #  self.table[names.index(i),prev_value,value]=self.table[names.index(i),prev_value,value]*sum1+0.2*self.table[names.index(i),prev_value,value]+0.01
-            else:
+            prev_probs=np.ones(5)
+            while spatial.distance.cosine(prev_probs,self.probs.values())!=0.0:
+            #  for k in range(5):
+                print spatial.distance.cosine(prev_probs,self.probs.values())
                 prev_probs=self.probs.values()
                 means=scipy.stats.dirichlet.mean(alpha=np.reshape(self.table,(1,self.table.shape[0]*self.table.shape[1]*self.table.shape[2]))[0])
                 new_means=np.reshape(np.array(means),(5,15,15))
@@ -321,10 +297,22 @@ class Window(QtGui.QWidget):
                 for i in names:
                     self.probs[i]/=suma
 
+                if self.total_obs>1:
+                    for prev_value in self.prev_obs:
+                        for value in obs:
+                            # this is used for redistribution
+                            sum1=sum(self.table[:,prev_value,value])
+                            for i in names:
+                                self.table[names.index(i),prev_value,value]*=self.probs[i]*(np.sum(new_means[:,prev_value,value])/np.sum(new_means))
+                            # this on is used for regular normalization
+                            sum2=sum(self.table[:,prev_value,value])
+                            for i in names:
+                                self.table[names.index(i),prev_value,value]/=sum2
+                            for i in names:
+                                self.table[names.index(i),prev_value,value]*=sum1
+                    self.table+=0.0001
+                                #  self.table[names.index(i),prev_value,value]=self.table[names.index(i),prev_value,value]*sum1+0.2*self.table[names.index(i),prev_value,value]+0.01
 
-            #  for prev_value in self.prev_obs:
-            #      for value in obs:
-            #          self.table[:,prev_value,value]+=0.1
             self.prev_obs=obs
             self.total_obs+=1
 
@@ -388,13 +376,9 @@ def make_some_data():
 def get_intensity():
     genus=np.random.randint(5)
     print genus
-    genus=4
+    genus=0
     target=Cumuliform(genus=genus,weather=True)
-    true_data=[]
-    for frame in target.intensityModel:
-        frame+=max(np.random.normal()*2,0)
-        true_data.append(frame)
-    return true_data
+    return target.intensityModel
 
 def DirPrior():
     table=np.zeros((5,15,15))
@@ -407,11 +391,6 @@ def DirPrior():
     for i in range(15):
         table[:,:,i]=base_table
     table*=0.1
-    for i in range(5):
-        table[:,i*3+2,i*3+2]*=2
-    for i in range(5):
-        table[i,i*3,i*3]*=2
-        table[i,i*3+2,i*3+2]*=0.01
     for i in range(15):
         table[:,i,i]*=3
     #  print table
@@ -419,8 +398,8 @@ def DirPrior():
 
 
 if __name__ == '__main__':
-    #  total=make_some_data()
-    total=[]
+    #total=make_some_data()
+    total = []
     prior=DirPrior()
     intensity=get_intensity()
     app=QtGui.QApplication(sys.argv)
