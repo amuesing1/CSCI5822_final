@@ -279,14 +279,7 @@ class Window(QtGui.QWidget):
                 obs.append(13)
             elif(self.rCumulonibiformNo.isChecked()):
                 obs.append(14)
-<<<<<<< HEAD
 
-            prev_probs=np.ones(5)
-            while spatial.distance.cosine(prev_probs,self.probs.values())!=0.0:
-            #  for k in range(5):
-                print spatial.distance.cosine(prev_probs,self.probs.values())
-=======
-            
             prev_probs=np.ones(5)
             if self.total_obs>1:
                 while spatial.distance.cosine(prev_probs,self.probs.values())!=0.0:
@@ -326,7 +319,6 @@ class Window(QtGui.QWidget):
                     self.table+=0.0001
                                 #  self.table[names.index(i),prev_value,value]=self.table[names.index(i),prev_value,value]*sum1+0.2*self.table[names.index(i),prev_value,value]+0.01
             else:
->>>>>>> 2ccdd840b5dedea5c0b06299f7b6134cab672ff7
                 prev_probs=self.probs.values()
                 means=scipy.stats.dirichlet.mean(alpha=np.reshape(self.table,(1,self.table.shape[0]*self.table.shape[1]*self.table.shape[2]))[0])
                 new_means=np.reshape(np.array(means),(5,15,15))
