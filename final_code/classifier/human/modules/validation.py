@@ -27,12 +27,12 @@ warnings.filterwarnings("ignore",category=RuntimeWarning)
 class Validation():
     def __init__(self):
 
-        self.table=self.DirPrior()
+        theta1_table=self.DirPrior()
         self.theta1=np.zeros((5,10))
         self.theta2_correct=np.zeros((50,10))
-        self.table_ind=np.mean(self.table,axis=1)
+        #  self.table_ind=np.mean(self.table,axis=1)
         for X in range(5):
-            self.theta1[X,:]=scipy.stats.dirichlet.mean(alpha=np.mean(self.table,axis=1)[X,:])
+            self.theta1[X,:]=scipy.stats.dirichlet.mean(alpha=np.mean(theta1_table,axis=1)[X,:])
         self.table_real[self.table_real<0]=0.1
         for X in range(5):
             for prev_obs in range(10):
@@ -43,7 +43,7 @@ class Validation():
         base_table=np.ones((5,10))
         #  base_table*=0.1
         for i in range(5):
-            base_table[i,2*i]*=2
+            base_table[i,2*i]*=5
             for j in range(5):
                 if i==j:
                     base_table[i,2*j+1]*=0.5
@@ -63,20 +63,26 @@ class Validation():
         base_table_real=np.ones((5,10))
         base_table_real*=5
         for i in range(5):
-            base_table_real[i,2*i]*=1.67
+            #tp
+            base_table_real[i,2*i]*=10
             for j in range(5):
                 if i==j:
-                    base_table_real[i,2*j+1]*=0.7
+                    #fn
+                    base_table_real[i,2*j+1]*=0.4
                 else:
+                    #tn
                     base_table_real[i,2*j+1]*=1.67
-                    base_table_real[i,2*j]*=0.7
+                    #fp
+                    base_table_real[i,2*j]*=0.4
         for i in range(10):
             table_real[:,:,i]=base_table_real
         for i in range(10):
-            table_real[:,i,i]*=50
+            #repeat
+            table_real[:,i,i]*=3
         table_real=np.swapaxes(table_real,1,2)
         table_real+=np.random.uniform(-1,1,(5,10,10))
         self.table_real=table_real
+        self.table=[5,0.5,4,8,15,1.5,12,24]
         #  print table_real
         return table
 
@@ -134,6 +140,188 @@ class Validation():
         for i in names:
             self.probs_ind[i]=post_probs[names.index(i)]
 
+    def build_theta2(self,num_tar,alphas):
+        theta2=np.empty((2*num_tar*num_tar,num_tar*2))
+        #  theta2_rates=scipy.stats.dirichlet.mean(alpha=alphas)
+        for i in range(theta2.shape[0]):
+            for j in range(theta2.shape[1]):
+                # repeat observations
+                if i%10==j:
+                    if j%2==0:
+                        # tp
+                        if i==6*j:
+                            theta2[i,j]=alphas[4]
+                        # fp
+                        else:
+                            theta2[i,j]=alphas[6]
+                    else:
+                        #fn
+                        if i==((j-1)*6)+1:
+                            theta2[i,j]=alphas[5]/(num_tar-1)
+                        #tn
+                        else:
+                            theta2[i,j]=alphas[7]/(num_tar-1)
+                #tp
+                elif (int(i/10)*2)==j:
+                    theta2[i,j]=alphas[0]
+                #fn
+                elif (int(i/10)*2+1)==j:
+                    theta2[i,j]=alphas[1]
+                #fp
+                elif (j%2==0) and (int(i/10)*2!=j):
+                    theta2[i,j]=alphas[2]/(num_tar-1)
+                #tn
+                elif (j%2-1==0) and ((int(i/10)*2+1)!=j):
+                    theta2[i,j]=alphas[3]/(num_tar-1)
+        return theta2
+
+    def updateProbsNew(self,num_tar,real_target):
+        names = ['Cumuliform0','Cumuliform1','Cumuliform2','Cumuliform3','Cumuliform4']
+        
+        # initialize Dir sample
+        num_samples=5000
+        sample_check=[]
+        postX=copy.deepcopy(self.probs)
+        all_post=np.zeros((int(num_samples/5),1,num_tar))
+        theta2_samples=np.zeros((int(num_samples/5),8))
+        theta2_static=scipy.stats.dirichlet.mean(alpha=self.table)
+        if len(self.obs)>0:
+            prev_obs=self.obs[-1]
+            self.obs.append(np.random.choice(range(10),p=self.theta2_correct[real_target*10+prev_obs,:]))
+        else:
+            self.obs.append(np.random.choice(range(10),p=self.theta1[real_target,:]))
+        # confusion matrix for human
+        if self.obs[-1]%2==0:
+            self.pred_obs.append(0)
+            if (self.obs[-1]/2)==real_target:
+                self.real_obs.append(0)
+            else:
+                self.real_obs.append(1)
+        else:
+            self.pred_obs.append(1)
+            if (int(self.obs[-1]/2))==real_target:
+                self.real_obs.append(0)
+            else:
+                self.real_obs.append(1)
+
+        theta2=copy.deepcopy(theta2_static)
+        #  print "Observation: %s" % obs_names[self.obs[-1]]
+        for n in range(num_samples):
+            for i in names:
+                # pay no mind to the theat2, this is the theta1 value
+                if names.index(i)*2==self.obs[0]:
+                    #tp
+                    likelihood=theta2[0]
+                elif self.obs[0]%2==0:
+                    #fp
+                    likelihood=theta2[1]
+                if names.index(i)*2+1==self.obs[0]:
+                    #fn
+                    likelihood=(theta2[2]/(num_tar-1))
+                elif self.obs[0]%2==1:
+                    #tn
+                    likelihood=(theta2[3]/(num_tar-1))
+                #  likelihood=self.theta1[names.index(i),self.obs[0]]
+                # sample from theta2
+                if len(self.obs)>1:
+                    count=0
+                    for value in self.obs[1:]:
+                        if names.index(i)*2==value:
+                            #tp
+                            if value==self.obs[count]:
+                                likelihood*=theta2[4]
+                            else:
+                                likelihood*=theta2[0]
+                        elif value%2==0:
+                            #fp
+                            if value==self.obs[count]:
+                                likelihood*=theta2[5]
+                            else:
+                                likelihood*=theta2[1]
+                        if names.index(i)*2+1==value:
+                            #fn
+                            if value==self.obs[count]:
+                                likelihood*=(theta2[6]/(num_tar-1))
+                            else:
+                                likelihood*=(theta2[2]/(num_tar-1))
+                        elif value%2==1:
+                            #tn
+                            if value==self.obs[count]:
+                                likelihood*=(theta2[7]/(num_tar-1))
+                            else:
+                                likelihood*=(theta2[3]/(num_tar-1))
+                        count+=1
+                #  print likelihood
+                postX[i]=self.probs[i]*likelihood
+            suma=sum(postX.values())
+            # normalize
+            for i in names:
+                postX[i]=np.log(postX[i])-np.log(suma) 
+                postX[i]=np.exp(postX[i])
+            if n%5==0:
+                all_post[int(n/num_tar),:,:]=postX.values()
+            # sample from X
+            X=np.random.choice(range(num_tar),p=postX.values())
+            alphas=copy.deepcopy(self.table)
+            theta2=copy.deepcopy(theta2_static)
+            if len(self.obs)>1:
+                if X*2==self.obs[-1]:
+                    #tp
+                    if self.obs[-1]==self.obs[-2]:
+                        alphas[4]+=1
+                    else:
+                        alphas[0]+=1
+                elif self.obs[-1]%2==0:
+                    #fp
+                    if self.obs[-1]==self.obs[-2]:
+                        alphas[5]+=1
+                    else:
+                        alphas[1]+=1
+                if X*2+1==self.obs[-1]:
+                    #fn
+                    if self.obs[-1]==self.obs[-2]:
+                        alphas[6]+=1
+                    else:
+                        alphas[2]+=1
+                elif self.obs[-1]%2==1:
+                    #tn
+                    if self.obs[-1]==self.obs[-2]:
+                        alphas[7]+=1
+                    else:
+                        alphas[3]+=1
+                theta2=np.random.dirichlet(alphas)
+                if self.hist_check:
+                    self.sample_check.append(theta2[4])
+                if n%5==0:
+                    theta2_samples[int(n/5)]=theta2
+
+        if len(self.obs)>1:
+            # estimation of alphas from distributions
+            sum_alpha=sum(self.table)
+            for k in range(theta2_samples.shape[1]):
+                samples=theta2_samples[np.nonzero(theta2_samples[:,k]),k]
+                if len(samples[0])==0:
+                    pass
+                else:
+                    current_alpha=self.table[k]
+                    for x in range(5):
+                        sum_alpha_old=sum_alpha-current_alpha+self.table[k]
+                        logpk=np.sum(np.log(samples[0]))/len(samples[0])
+                        y=psi(sum_alpha_old)+logpk
+                        if y>=-2.22:
+                            alphak=np.exp(y)+0.5
+                        else:
+                            alphak=-1/(y+psi(1))
+                        #  print "start:",alphak
+                        for w in range(5):
+                            alphak-=((psi(alphak)-y)/polygamma(1,alphak))
+                        self.table[k]=alphak
+
+        post_probs=np.mean(all_post,axis=0)
+        for i in names:
+            self.probs[i]=post_probs[0][names.index(i)]
+
+
     def updateProbs(self,real_target):
         names = ['Cumuliform0','Cumuliform1','Cumuliform2','Cumuliform3','Cumuliform4']
         obs_names=['Yes-0','No-0','Yes-1','No-1','Yes-2','No-2','Yes-3','No-3','Yes-4','No-4']
@@ -145,12 +333,9 @@ class Validation():
         postX=copy.deepcopy(self.probs)
         all_post=np.zeros((int(num_samples/5),1,5))
         all_theta2=np.zeros((int(num_samples/5),50,10))
-        #  all_theta2[:]=np.nan
         for X in range(5):
             for prev_obs in range(10):
-                #  print self.table[X,prev_obs,:]
                 theta2_static[X*10+prev_obs,:]=scipy.stats.dirichlet.mean(alpha=self.table[X,prev_obs,:])
-                #  print theta2_static[X*10+prev_obs,:]
         if len(self.obs)>0:
             prev_obs=self.obs[-1]
             self.obs.append(np.random.choice(range(10),p=self.theta2_correct[real_target*10+prev_obs,:]))
@@ -179,8 +364,6 @@ class Validation():
                 if len(self.obs)>1:
                     for value in self.obs[1:]:
                         likelihood*=theta2[names.index(i)*10+self.obs[self.obs.index(value)-1],value]
-                        #  print "Alpha value: %f" % self.table[names.index(i),self.obs[self.obs.index(value)-1],value]
-                        #  print "Theta value: %f" % theta2[names.index(i)*10+self.obs[self.obs.index(value)-1],value]
                 #  print likelihood
                 postX[i]=self.probs[i]*likelihood
             suma=sum(postX.values())
@@ -196,48 +379,28 @@ class Validation():
             theta2=copy.deepcopy(theta2_static)
             if len(self.obs)>1:
                 alphas[X,self.obs[-2],self.obs[-1]]+=1
-                #  print X,self.obs[y-1],value
-                #  print "alphas",alphas[X,self.obs[y-1],:]
-                #  print "start",theta2[X*10+self.obs[y-1],:]
                 theta2[X*10+self.obs[-2],:]=np.random.dirichlet(alphas[X,self.obs[-2],:])
-                #  if (X==0) and (self.obs[y-1]==1):
-                #      print value,alphas[X,self.obs[y-1],:]
-                #      print value,theta2[X*10+self.obs[y-1],:]
-                #  print "end",theta2[X*10+self.obs[y-1],:]
                 if n%5==0:
                     all_theta2[int(n/5),X*10+self.obs[-2],:]=theta2[X*10+self.obs[-2],:]
 
         if len(self.obs)>1:
-            #  print all_theta2.shape
-            #  print "alphas start",self.table[0,1,:]
+            sample_counts=np.zeros((50,10))
+            # estimation of alphas from distributions
             for n in range(all_theta2.shape[1]):
                 pk_top_list=[]
                 sum_alpha=sum(self.table[int(n/10),n%10,:])
                 for k in range(all_theta2.shape[2]):
                     samples=all_theta2[np.nonzero(all_theta2[:,n,k]),n,k]
-                    #  if (n==0) and (k==0) and (len(samples[0])>0):
-                    #      print "obs" ,self.obs, "sample mean",np.mean(all_theta2[np.nonzero(all_theta2[:,0,:]),0,:],axis=1)[0]
                     if len(samples[0])==0:
                         pass
                     else:
-                        #  print np.mean(samples[0])
-                        #  print "real:",scipy.stats.dirichlet.mean(alpha=self.table_real[int(n/10),n%10,:])[k]
+                        sample_counts[n,k]=len(samples[0])
                         pk_top_list.append(np.mean(samples[0]))
                         current_alpha=self.table[int(n/10),n%10,k]
-                        #  print "result:",np.mean(samples)
-                        #  print "real:",self.theta2_correct[n,k]
                         for x in range(5):
-                            #  N_numerator=1
-                            #  for k in range(all_theta2.shape[2]):
-                            #      N_numerator=N_numerator*gamma(self.table[int(n/10),n%10,k])
                             sum_alpha_old=sum_alpha-current_alpha+self.table[int(n/10),n%10,k]
-                            #  N=N_numerator/gamma(sum_alpha)
                             logpk=np.sum(np.log(samples[0]))/len(samples[0])
-                            #  print logpk
                             y=psi(sum_alpha_old)+logpk
-                            #  print "total alpha:",sum_alpha
-                            #  print "logpk:",logpk
-                            #  print "y:",y
                             if y>=-2.22:
                                 alphak=np.exp(y)+0.5
                             else:
@@ -246,28 +409,6 @@ class Validation():
                             for w in range(5):
                                 alphak-=((psi(alphak)-y)/polygamma(1,alphak))
                             self.table[int(n/10),n%10,k]=alphak
-                            #  if (n==1) and (k==9) and (len(samples[0])>0) and (x==4):
-                            #      print "theta start",theta2_static[1,:]
-                            #      print "end theta",scipy.stats.dirichlet.mean(alpha=self.table[0,1,:])
-                                #  print "real theta",scipy.stats.dirichlet.mean(alpha=self.table_real[0,1,:])
-                            #      print "alphas end",self.table[0,1,:]
-                                #  print "alphas real",self.table_real[0,1,:]
-                                #  sys.exit()
-                        #  print "result:",alphak
-                            #  print "result y:",psi(alphak)
-                            #  print "what y should be:",psi(self.table_real[int(n/10),n%10,m])
-                            #  print "what logpk should be:",psi(self.table_real[int(n/10),n%10,m])-psi(sum_alpha)
-                            #  print "what N should be:",(np.sum(np.log(pklist)))/(psi(self.table_real[int(n/10),n%10,m])-psi(sum_alpha))
-                        #  print "real:",self.table_real[int(n/10),n%10,k]
-                            #  sys.exit()
-                #  if (n==0) and (len(samples[0])>0):
-                #      print "result:",self.table[int(n/10),n%10,:]
-                #      print "real:",self.table_real[int(n/10),n%10,:]
-                #      print "sample:",["%.2f" % e for e in pk_top_list]
-                #      print "sample:",["%.2f" % e for e in pk_top_list]
-                    #  print "result:",scipy.stats.dirichlet.mean(alpha=self.table[int(n/10),n%10,:])
-                    #  print "real:",scipy.stats.dirichlet.mean(alpha=self.table_real[int(n/10),n%10,:])
-                #      sys.exit()
 
         post_probs=np.mean(all_post,axis=0)
         for i in names:
@@ -297,6 +438,8 @@ if __name__ == '__main__':
     pred_percent=[]
     sim.pred_obs=[]
     sim.real_obs=[]
+    sim.hist_check=False
+    sim.sample_check=[]
     #  theta_real_ind=np.empty((5,10))
     #  theta_calc_ind=np.empty((5,10))
     names = ['Cumuliform0','Cumuliform1','Cumuliform2','Cumuliform3','Cumuliform4']
@@ -307,6 +450,8 @@ if __name__ == '__main__':
     #  correct_ind=[0]*num_tar
     #  correct_percent_ind=[]
     for n in tqdm(range(num_tar),ncols=100):
+        if n==num_tar-1:
+            sim.hist_check=True
     #  for n in range(num_tar):
     #      print "%d /50" % n
         # initialize target type
@@ -337,8 +482,9 @@ if __name__ == '__main__':
         sim.obs=[]
         # 5 observations per target
         #  for j in range(int(np.random.uniform(1,6))):
-        for j in range(5):
-            sim.updateProbs(genus)
+        #  for j in range(5):
+        while max(sim.probs.values())<0.9:
+            sim.updateProbsNew(5,genus)
             #  sim.updateProbs_ind(genus)
         chosen=max(sim.probs.values())
         pred_percent.append(chosen)
@@ -351,18 +497,21 @@ if __name__ == '__main__':
         #      correct_ind[n]=1
         correct_percent.append(sum(correct)/(n+1))
         #  correct_percent_ind.append(sum(correct_ind)/(n+1))
+        found_alphas=sim.build_theta2(5,sim.table)
+        #  print found_alphas.shape
         for X in range(5):
             #  theta_real_ind[X,:]=scipy.stats.dirichlet.mean(alpha=np.mean(sim.table_real,axis=1)[X,:])
             #  theta_calc_ind[X,:]=scipy.stats.dirichlet.mean(alpha=sim.table_ind[X,:])
             for prev_obs in range(10):
+                #  print sim.table_real[X,prev_obs,:]
                 theta_real_mean[X*10+prev_obs,:]=scipy.stats.dirichlet.mean(alpha=sim.table_real[X,prev_obs,:])
-                theta_calc_mean[X*10+prev_obs,:]=scipy.stats.dirichlet.mean(alpha=sim.table[X,prev_obs,:])
+                #  theta_calc_mean[X*10+prev_obs,:]=scipy.stats.dirichlet.mean(alpha=sim.table[X,prev_obs,:])
+                theta_calc_mean[X*10+prev_obs,:]=scipy.stats.dirichlet.mean(alpha=found_alphas[X*10+prev_obs,:])
                 theta_real_var[X*10+prev_obs,:]=scipy.stats.dirichlet.var(alpha=sim.table_real[X,prev_obs,:])
-                theta_calc_var[X*10+prev_obs,:]=scipy.stats.dirichlet.var(alpha=sim.table[X,prev_obs,:])
+                #  theta_calc_var[X*10+prev_obs,:]=scipy.stats.dirichlet.var(alpha=sim.table[X,prev_obs,:])
+                theta_calc_var[X*10+prev_obs,:]=scipy.stats.dirichlet.var(alpha=found_alphas[X*10+prev_obs,:])
         if (n%int((num_tar/10))==0) or n==(num_tar-1):
             difference=np.empty([50,10])
-            #  print theta_real_mean[10,2],theta_calc_mean[10,2]
-            #  print theta_real_var[10,2],theta_calc_var[10,2]
             for i in range(difference.shape[0]):
                 for j in range(difference.shape[1]):
                     difference[i,j]=KLD(theta_real_mean[i,j],theta_calc_mean[i,j],theta_real_var[i,j],theta_calc_var[i,j])
@@ -419,12 +568,14 @@ if __name__ == '__main__':
         #  plt.imshow(np.log(total_difference[i+1]),cmap='hot',vmin=np.min(np.log(total_difference[1:,:,:])),vmax=np.max(np.log(total_difference[1:,:,:])))
         plt.xticks([])
         plt.yticks([])
-        #  plt.imshow(total_difference[i],cmap='hot')
         plt.xlabel('%d Targets' % (int(num_tar/10)*i))
         if i==5:
             plt.title('KLD Distance for Dirichlet Distributions')
     cax=plt.axes([0.93,0.25,0.025,0.5])
     plt.colorbar(cax=cax)
+
+    plt.figure(3)
+    plt.hist(sim.sample_check,100)
 
     plt.show()
 

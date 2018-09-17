@@ -490,7 +490,11 @@ class InterfaceWindow(QWidget):
                     #  print theta2
             theta2_change=(theta2_static-np.nan_to_num(np.nanmean(all_theta2,axis=0)))/theta2_static
             theta2_change[theta2_change==1]=0
-            theta2_change[theta2_change<0]=0
+            if np.amin(theta2_change)<0:
+                rows=list(set(np.where(theta2_change<0)[0]))
+                for i in rows:
+                    smallest=min(theta2_change[i,:])
+                    theta2_change[i,:]+=smallest
             theta2_change=theta2_change.reshape((5,10,10))
             #  print theta2_change
             post_probs=np.mean(all_post[1:],axis=0)
